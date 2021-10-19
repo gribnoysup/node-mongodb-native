@@ -113,7 +113,9 @@ const SKIP_TESTS = [
   'Client side error in command starting transaction',
   'Client side error when transaction is in progress',
 
-  // Will be implemented as part of NODE-2538
+  // TODO(NODE-3683): Our retry logic is incorrect, abortTransaction is run via a RunAdminCommandOperation, which is not marked as retryable, additionally we calculate willRetryWrite with !inTransaction which I believe is correct, but not for abort/commit Transaction commands.
+  // The abortTransaction command does correctly have the 'RetryableWriteError' label but it goes unused.
+  // These were originally skipped because mongos couldn't attach the label with a failPoint set, that has been fixed.
   'abortTransaction only retries once with RetryableWriteError from server',
   'abortTransaction does not retry without RetryableWriteError label',
   'commitTransaction does not retry error without RetryableWriteError label',
@@ -122,25 +124,12 @@ const SKIP_TESTS = [
 
 describe('Transactions Spec Legacy Tests', function () {
   const testContext = new TransactionsRunnerContext();
-  const suitesToRun = [{ name: 'spec tests', specPath: path.join('transactions', 'legacy') }];
-  // Note: convenient-api tests are skipped for serverless
-  if (!process.env.SERVERLESS) {
-    suitesToRun.push({
-      name: 'withTransaction spec tests',
-      specPath: path.join('transactions', 'convenient-api')
-    });
-  } else {
-    // FIXME(NODE-3550): these tests should pass on serverless but currently fail
-    SKIP_TESTS.push(
-      'abortTransaction only performs a single retry',
-      'abortTransaction does not retry after Interrupted',
-      'abortTransaction does not retry after WriteConcernError Interrupted',
-      'commitTransaction does not retry error without RetryableWriteError label',
-      'commitTransaction is not retried after UnsatisfiableWriteConcern error',
-      'commitTransaction fails after Interrupted'
-    );
-  }
-  suitesToRun.forEach(suiteSpec => {
+  const suitesToRun = [
+    { name: 'spec tests', specPath: path.join('transactions', 'legacy') },
+    { name: 'withTransaction spec tests', specPath: path.join('transactions', 'convenient-api') }
+  ];
+
+  for (const suiteSpec of suitesToRun) {
     describe(suiteSpec.name, function () {
       const testSuites = loadSpecTests(suiteSpec.specPath);
       after(() => testContext.teardown());
@@ -154,7 +143,7 @@ describe('Transactions Spec Legacy Tests', function () {
 
       generateTopologyTests(testSuites, testContext, testFilter);
     });
-  });
+  }
 
   describe('withTransaction', function () {
     let session, sessionPool;
